@@ -1,0 +1,201 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function myUid() {
+      return request.auth.uid;
+    }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/profiles/$(myUid())).data;
+    }
+
+    function myRole() {
+      return signedIn() && exists(/databases/$(database)/documents/profiles/$(myUid()))
+        ? myProfile().role
+        : "user";
+    }
+
+    function isAdmin() {
+      return signedIn() && myRole() == "admin";
+    }
+
+    function isOrganizer() {
+      return signedIn() && myRole() == "organizer";
+    }
+
+    function isOrganizerOrAdmin() {
+      return isOrganizer() || isAdmin();
+    }
+
+    function eventDoc(eventId) {
+      return get(/databases/$(database)/documents/events/$(eventId)).data;
+    }
+
+    function eventExists(eventId) {
+      return exists(/databases/$(database)/documents/events/$(eventId));
+    }
+
+    function participantDoc(eventId, userId) {
+      return get(/databases/$(database)/documents/eventParticipants/$(eventId + "_" + userId)).data;
+    }
+
+    function participantExists(eventId, userId) {
+      return exists(/databases/$(database)/documents/eventParticipants/$(eventId + "_" + userId));
+    }
+
+    function isVisibleParticipant(eventId, userId) {
+      return participantExists(eventId, userId) && participantDoc(eventId, userId).visible == true;
+    }
+
+    function eventIsLive(eventId) {
+      return eventExists(eventId)
+        && eventDoc(eventId).isActive == true
+        && request.time >= eventDoc(eventId).startsAt
+        && request.time <= eventDoc(eventId).endsAt;
+    }
+
+    function eventIsOpenForCheckIn(eventId) {
+      return eventExists(eventId)
+        && eventDoc(eventId).isActive == true
+        && eventDoc(eventId).checkInEnabled == true;
+    }
+
+    function blockExists(blockerId, blockedId) {
+      return exists(/databases/$(database)/documents/blocks/$(blockerId + "_" + blockedId));
+    }
+
+    function noBlockBetween(userA, userB) {
+      return !blockExists(userA, userB) && !blockExists(userB, userA);
+    }
+
+    function conversationDoc(conversationId) {
+      return get(/databases/$(database)/documents/conversations/$(conversationId)).data;
+    }
+
+    function isConversationParticipant(conversationId, userId) {
+      return exists(/databases/$(database)/documents/conversations/$(conversationId))
+        && conversationDoc(conversationId).participants[userId] == true;
+    }
+
+    match /profiles/{userId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && myUid() == userId
+        && request.resource.data.role == "user"
+        && request.resource.data.isBanned != true;
+
+      allow update: if signedIn() && (
+        isAdmin()
+        || (
+          myUid() == userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.organizerStatus == resource.data.organizerStatus
+          && request.resource.data.organizerApprovedAt == resource.data.organizerApprovedAt
+          && request.resource.data.reportCount == resource.data.reportCount
+          && request.resource.data.isSuspect == resource.data.isSuspect
+          && request.resource.data.isBanned == resource.data.isBanned
+        )
+        || (
+          myUid() != userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["reportCount", "isSuspect", "updatedAt"])
+          && request.resource.data.reportCount == resource.data.reportCount + 1
+          && request.resource.data.isSuspect == (request.resource.data.reportCount >= 5)
+        )
+      );
+    }
+
+    match /organizerRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.userId == myUid()
+        && request.resource.data.status == "pending";
+
+      allow read: if signedIn() && (
+        isAdmin() || resource.data.userId == myUid()
+      );
+
+      allow update: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      allow read: if signedIn();
+
+      allow create: if isOrganizerOrAdmin()
+        && request.resource.data.ownerId == myUid();
+
+      allow update: if isAdmin()
+        || (
+          isOrganizer()
+          && resource.data.ownerId == myUid()
+          && request.resource.data.ownerId == resource.data.ownerId
+        );
+    }
+
+    match /eventParticipants/{participantId} {
+      allow read: if signedIn() && (
+        (resource == null && participantId.matches('.*_' + myUid()))
+        ||
+        myUid() == resource.data.userId
+        || isVisibleParticipant(resource.data.eventId, myUid())
+        || isAdmin()
+      );
+
+      allow create, update: if signedIn() && (
+        isAdmin()
+        || (
+          request.resource.data.userId == myUid()
+          && (
+            (
+              eventIsOpenForCheckIn(request.resource.data.eventId)
+              || (isOrganizerOrAdmin() && eventExists(request.resource.data.eventId) && eventDoc(request.resource.data.eventId).isActive == true)
+            )
+            || request.resource.data.visible == false
+          )
+        )
+      );
+    }
+
+    match /conversations/{conversationId} {
+      allow read: if signedIn() && (isAdmin() || resource.data.participants[myUid()] == true);
+
+      allow create: if signedIn()
+        && request.resource.data.participants[myUid()] == true
+        && request.resource.data.eventId is string
+        && eventIsLive(request.resource.data.eventId)
+        && isVisibleParticipant(request.resource.data.eventId, myUid());
+
+      allow update: if signedIn()
+        && (isAdmin() || resource.data.participants[myUid()] == true);
+
+      match /messages/{messageId} {
+        allow read: if signedIn() && (isAdmin() || isConversationParticipant(conversationId, myUid()));
+
+        allow create: if signedIn()
+          && isConversationParticipant(conversationId, myUid())
+          && request.resource.data.from == myUid()
+          && eventIsLive(conversationDoc(conversationId).eventId)
+          && isVisibleParticipant(conversationDoc(conversationId).eventId, myUid());
+      }
+    }
+
+    match /blocks/{blockId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.blockerId == myUid()
+        && request.resource.data.blockedId is string;
+    }
+
+    match /reports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.reporterId == myUid();
+
+      allow read: if isAdmin();
+    }
+  }
+}

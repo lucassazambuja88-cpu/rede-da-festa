@@ -1,0 +1,17 @@
+{
+  "name": "Rede da Festa",
+  "short_name": "Rede da Festa",
+  "description": "Rede social temporaria para eventos, festas e casas noturnas.",
+  "start_url": "/login",
+  "display": "standalone",
+  "background_color": "#121218",
+  "theme_color": "#121218",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
