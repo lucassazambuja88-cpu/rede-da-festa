@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EventCard } from "@/components/EventCard";
 import { useAuth } from "@/context/AuthContext";
-import { getCurrentEventId } from "@/services/currentEventStorage";
-import { getEventById, isUserVisibleInEvent, listPublicEvents } from "@/services/eventService";
+import { clearCurrentEventId, getCurrentEventId } from "@/services/currentEventStorage";
+import { closeExpiredEvent, getEventById, getEventStatus, isUserVisibleInEvent, listPublicEvents } from "@/services/eventService";
 import { EventItem } from "@/types";
 
 export function EventsPage() {
@@ -20,10 +20,25 @@ export function EventsPage() {
 
       const currentEventId = getCurrentEventId();
       if (user?.uid && currentEventId) {
-        const [event, visible] = await Promise.all([
-          getEventById(currentEventId),
-          isUserVisibleInEvent(currentEventId, user.uid),
-        ]);
+        const event = await getEventById(currentEventId);
+
+        if (!event) {
+          clearCurrentEventId();
+          setActiveEvent(null);
+          setLoading(false);
+          return;
+        }
+
+        const status = getEventStatus(event);
+        if (status.isEnded) {
+          await closeExpiredEvent(event);
+          clearCurrentEventId();
+          setActiveEvent(null);
+          setLoading(false);
+          return;
+        }
+
+        const visible = await isUserVisibleInEvent(currentEventId, user.uid);
         setActiveEvent(visible ? event : null);
       } else {
         setActiveEvent(null);

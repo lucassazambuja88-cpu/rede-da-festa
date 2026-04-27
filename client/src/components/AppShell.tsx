@@ -67,6 +67,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             </nav>
           ) : null}
+          {user ? (
+            <button
+              className="flex min-h-11 items-center justify-center rounded-full bg-white/6 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10 md:hidden"
+              onClick={() => logout()}
+              type="button"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:px-6 lg:px-8">{children}</main>

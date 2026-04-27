@@ -5,6 +5,7 @@ import {
   User,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { clearCurrentEventId } from "@/services/currentEventStorage";
 
 export async function signUp(email: string, password: string): Promise<User> {
   const credential = await createUserWithEmailAndPassword(auth, email, password);
@@ -17,6 +18,6 @@ export async function signIn(email: string, password: string): Promise<User> {
 }
 
 export async function logout() {
+  clearCurrentEventId();
   await signOut(auth);
 }
-

@@ -37,9 +37,16 @@ export function EventRoomPage() {
           return;
         }
         setEvent(foundEvent);
-        setCurrentEventId(eventId);
         if (foundEvent) {
           await closeExpiredEvent(foundEvent);
+          const foundEventStatus = getEventStatus(foundEvent);
+          if (foundEventStatus.isEnded) {
+            clearCurrentEventId();
+            setViewerIsInside(false);
+            setNotice("Este evento ja foi encerrado. Sua presenca nao fica mais ativa.");
+            return;
+          }
+          setCurrentEventId(eventId);
         }
         if (foundEvent && user?.uid) {
           const participant = await getEventParticipant(eventId, user.uid);

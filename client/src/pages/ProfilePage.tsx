@@ -2,6 +2,7 @@ import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { useAuth } from "@/context/AuthContext";
+import { logout } from "@/services/authService";
 import { saveProfile, uploadProfilePhoto } from "@/services/profileService";
 import { GenderOption } from "@/types";
 
@@ -245,6 +246,14 @@ export function ProfilePage() {
               type="submit"
             >
               {saving ? "Salvando..." : "Salvar perfil"}
+            </button>
+
+            <button
+              className="min-h-11 rounded-full border border-white/12 px-5 text-sm font-semibold text-white/84 md:hidden"
+              onClick={() => void logout()}
+              type="button"
+            >
+              Sair da conta
             </button>
           </form>
         </section>
