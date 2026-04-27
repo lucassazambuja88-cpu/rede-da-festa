@@ -21,13 +21,32 @@ function mapTimestamp(value: unknown) {
   return value instanceof Timestamp ? value.toDate().toISOString() : String(value ?? "");
 }
 
+function normalizeEntryUrl(code: string, rawUrl: unknown) {
+  const fallback = buildEntryUrl(code);
+  const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const parsedUrl = String(rawUrl ?? "").trim();
+
+  if (!parsedUrl) {
+    return fallback;
+  }
+
+  if (currentOrigin && (parsedUrl.includes("127.0.0.1") || parsedUrl.includes("localhost"))) {
+    return `${currentOrigin}${buildEntryPath(code)}`;
+  }
+
+  return parsedUrl;
+}
+
 function mapEvent(entry: { id: string; data: () => Record<string, unknown> }) {
   const data = entry.data();
+  const code = String(data.code ?? "");
+  const entryUrl = normalizeEntryUrl(code, data.entryUrl);
   return {
     id: entry.id,
     ...data,
-    entryPath: String(data.entryPath ?? buildEntryPath(String(data.code ?? ""))),
-    entryUrl: String(data.entryUrl ?? buildEntryUrl(String(data.code ?? ""))),
+    entryPath: buildEntryPath(code),
+    entryUrl,
+    qrPayload: normalizeEntryUrl(code, data.qrPayload ?? data.entryUrl),
     startsAt: mapTimestamp(data.startsAt),
     endsAt: mapTimestamp(data.endsAt),
   } as EventItem;
